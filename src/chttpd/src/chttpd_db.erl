@@ -66,21 +66,35 @@
 handle_request(#httpd{path_parts=[DbName|RestParts],method=Method}=Req)->
     case {Method, RestParts} of
     {'PUT', []} ->
-        create_db_req(Req, DbName);
+        OpName = ctrace:fun_to_op(fun create_db_req/2),
+        ctrace:with_span(OpName, fun() ->
+            create_db_req(Req, DbName)
+        end);
     {'DELETE', []} ->
          % if we get ?rev=... the user is using a faulty script where the
          % document id is empty by accident. Let them recover safely.
          case chttpd:qs_value(Req, "rev", false) of
-             false -> delete_db_req(Req, DbName);
+             false ->
+                 OpName = ctrace:fun_to_op(fun delete_db_req/2),
+                 ctrace:with_span(OpName, fun() ->
+                     delete_db_req(Req, DbName)
+                 end);
              _Rev -> throw({bad_request,
                  "You tried to DELETE a database with a ?=rev parameter. "
                  ++ "Did you mean to DELETE a document instead?"})
          end;
     {_, []} ->
-        do_db_req(Req, fun db_req/2);
+        Handler = fun db_req/2,
+        OpName = ctrace:fun_to_op(Handler),
+        ctrace:with_span(OpName, fun() ->
+            do_db_req(Req, fun db_req/2)
+        end);
     {_, [SecondPart|_]} ->
         Handler = chttpd_handlers:db_handler(SecondPart, fun db_req/2),
-        do_db_req(Req, Handler)
+        OpName = ctrace:fun_to_op(fun ?MODULE:db_req/2),
+        ctrace:with_span(OpName, fun() ->
+            do_db_req(Req, Handler)
+        end)
     end.
 
 handle_changes_req(#httpd{method='POST'}=Req, Db) ->
@@ -336,7 +350,10 @@ handle_design_req(#httpd{
     case fabric2_db:open_doc(Db, <<"_design/", Name/binary>>) of
     {ok, DDoc} ->
         Handler = chttpd_handlers:design_handler(Action, fun bad_action_req/3),
-        Handler(Req, Db, DDoc);
+        OpName = ctrace:fun_to_op(Handler),
+        ctrace:with_span(OpName, fun() ->
+            Handler(Req, Db, DDoc)
+        end);
     Error ->
         throw(Error)
     end;

@@ -32,10 +32,14 @@
 %% ------------------------------------------------------------------
 
 authenticate(HttpReq, Default) ->
-    maybe_handle(authenticate, [HttpReq], Default).
+    ctrace:with_span('http.authenticate', fun() ->
+        maybe_handle(authenticate, [HttpReq], Default)
+    end).
 
 authorize(HttpReq, Default) ->
-    maybe_handle(authorize, [HttpReq], Default).
+    ctrace:with_span('http.authorize', fun() ->
+        maybe_handle(authorize, [HttpReq], Default)
+    end).
 
 
 %% ------------------------------------------------------------------

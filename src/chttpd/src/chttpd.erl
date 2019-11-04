@@ -152,6 +152,7 @@ stop() ->
     mochiweb_http:stop(?MODULE).
 
 handle_request(MochiReq0) ->
+    ctrace:start_span('http.request'),
     erlang:put(?REWRITE_COUNT, 0),
     MochiReq = couch_httpd_vhost:dispatch_host(MochiReq0),
     handle_request_int(MochiReq).
@@ -231,6 +232,15 @@ handle_request_int(MochiReq) ->
                 || Part <- string:tokens(RequestedPath, "/")]
     },
 
+    ctrace:add_tags(#{
+        peer => Peer,
+        'http.method' => Method,
+        nonce => Nonce,
+        'http.url' => Path,
+        'span.kind' => <<"server">>,
+        component => <<"couchdb.chttpd">>
+    }),
+
     % put small token on heap to keep requests synced to backend calls
     erlang:put(nonce, Nonce),
 
@@ -258,7 +268,12 @@ handle_request_int(MochiReq) ->
     },
 
     case after_request(HttpReq2, HttpResp) of
-        #httpd_resp{status = ok, response = Resp} ->
+        #httpd_resp{status = ok, code = Code, response = Resp} ->
+            ctrace:add_tags(#{
+                error => false,
+                'http.status_code' => Code
+            }),
+            ctrace:finish_span(),
             {ok, Resp};
         #httpd_resp{status = aborted, reason = Reason} ->
             couch_log:error("Response abnormally terminated: ~p", [Reason]),
@@ -321,7 +336,10 @@ handle_req_after_auth(HandlerKey, HttpReq) ->
             fun chttpd_db:handle_request/1),
         AuthorizedReq = chttpd_auth:authorize(possibly_hack(HttpReq),
             fun chttpd_auth_request:authorize_request/1),
-        {AuthorizedReq, HandlerFun(AuthorizedReq)}
+        OpName = ctrace:fun_to_op(HandlerFun),
+        ctrace:with_span(OpName, fun() ->
+            {AuthorizedReq, HandlerFun(AuthorizedReq)}
+        end)
     catch Tag:Error ->
         {HttpReq, catch_error(HttpReq, Tag, Error)}
     end.
@@ -1050,16 +1068,34 @@ send_error(#httpd{} = Req, Code, ErrorStr, ReasonStr) ->
     send_error(Req, Code, [], ErrorStr, ReasonStr, []).
 
 send_error(Req, Code, Headers, ErrorStr, ReasonStr, []) ->
-    send_json(Req, Code, Headers,
+    Result = send_json(Req, Code, Headers,
         {[{<<"error">>,  ErrorStr},
-        {<<"reason">>, ReasonStr}]});
+        {<<"reason">>, ReasonStr}]}),
+    finish_span_error(Code, ErrorStr, ReasonStr, []),
+    Result;
 send_error(Req, Code, Headers, ErrorStr, ReasonStr, Stack) ->
     log_error_with_stack_trace({ErrorStr, ReasonStr, Stack}),
-    send_json(Req, Code, [stack_trace_id(Stack) | Headers],
+    Result = send_json(Req, Code, [stack_trace_id(Stack) | Headers],
         {[{<<"error">>,  ErrorStr},
         {<<"reason">>, ReasonStr} |
         case Stack of [] -> []; _ -> [{<<"ref">>, stack_hash(Stack)}] end
-    ]}).
+    ]}),
+    finish_span_error(Code, ErrorStr, ReasonStr, Stack),
+    Result.
+
+
+finish_span_error(Code, ErrorStr, ReasonStr, Stack) ->
+    ctrace:add_tags(#{
+        error => true,
+        'http.status_code' => Code
+    }),
+    ctrace:log(#{
+        'error.kind' => ErrorStr,
+        message => ReasonStr,
+        stack => Stack
+    }),
+    ctrace:finish_span().
+
 
 update_timeout_stats(<<"timeout">>, #httpd{requested_path_parts = PathParts}) ->
     update_timeout_stats(PathParts);
