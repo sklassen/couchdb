@@ -62,7 +62,7 @@ poll(DbName, Since, Mod, Fun, St) ->
                 exit(Error)
         end
     catch error:database_does_not_exist ->
-        Mod:Fun(DbName, deleted, St)
+        {Mod:Fun(DbName, deleted, St), deleted}
     end,
     receive
         stop_listening ->
@@ -71,9 +71,11 @@ poll(DbName, Since, Mod, Fun, St) ->
             ok
     after 0 ->
         case Resp of
-            {ok, NewSt} ->
+            {ok, NewSt} when NewSince /= deleted ->
                 timer:sleep(1000),
                 ?MODULE:poll(DbName, NewSince, Mod, Fun, NewSt);
+            {ok, _} when NewSince == deleted ->
+                ok;
             {stop, _} ->
                 ok
         end
