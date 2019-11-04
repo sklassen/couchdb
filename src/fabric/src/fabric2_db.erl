@@ -1224,15 +1224,22 @@ update_doc_int(#{} = Db, #doc{} = Doc, Options) ->
 
 update_docs_interactive(Db, Docs0, Options) ->
     Docs = tag_docs(Docs0),
-    Futures = get_winning_rev_futures(Db, Docs),
-    {Result, _} = lists:mapfoldl(fun(Doc, SeenIds) ->
-        try
-            update_docs_interactive(Db, Doc, Options, Futures, SeenIds)
-        catch throw:{?MODULE, Return} ->
-            {Return, SeenIds}
-        end
-    end, [], Docs),
-    Result.
+    Futures = ctrace:with_span('fabric2_db:get_winning_rev_futures/2', fun() ->
+        get_winning_rev_futures(Db, Docs)
+    end),
+    ctrace:with_span('fabric2_db:update_docs_interactive/3 mapfoldl', fun() ->
+        {Result, _} = lists:mapfoldl(fun(Doc, SeenIds) ->
+            try
+                ctrace:with_span('fabric2_db:update_docs_interactive/5', fun() ->
+                    ctrace:add_tags(#{'doc.id' => Doc#doc.id}),
+                    update_docs_interactive(Db, Doc, Options, Futures, SeenIds)
+                end)
+            catch throw:{?MODULE, Return} ->
+                {Return, SeenIds}
+            end
+        end, [], Docs),
+        Result
+    end).
 
 
 update_docs_interactive(Db, #doc{id = <<?LOCAL_DOC_PREFIX, _/binary>>} = Doc,

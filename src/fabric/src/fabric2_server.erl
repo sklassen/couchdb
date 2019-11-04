@@ -20,6 +20,8 @@
     fetch/1,
     store/1,
     remove/1,
+
+    fdb_cluster/0,
     fdb_directory/0
 ]).
 
@@ -38,6 +40,7 @@
 
 
 -define(CLUSTER_FILE, "/usr/local/etc/foundationdb/fdb.cluster").
+-define(FDB_CLUSTER, fdb_cluster).
 -define(FDB_DIRECTORY, fdb_directory).
 -define(DEFAULT_FDB_DIRECTORY, <<"couchdb">>).
 
@@ -77,9 +80,16 @@ init(_) ->
 
     Db = case application:get_env(fabric, eunit_run) of
         {ok, true} ->
+            application:set_env(fabric, ?FDB_CLUSTER, <<"eunit_test">>),
             erlfdb_util:get_test_db([empty]);
         undefined ->
             ClusterStr = config:get("erlfdb", "cluster_file", ?CLUSTER_FILE),
+            try
+                {ok, Data} = file:read_file(ClusterStr),
+                application:set_env(fabric, ?FDB_CLUSTER, string:trim(Data))
+            catch _:_ ->
+                application:set_env(fabric, ?FDB_CLUSTER, <<"unknown">>)
+            end,
             erlfdb:open(iolist_to_binary(ClusterStr))
     end,
     application:set_env(fabric, db, Db),
@@ -115,14 +125,22 @@ code_change(_OldVsn, St, _Extra) ->
     {ok, St}.
 
 
+fdb_cluster() ->
+    fdb_get(?FDB_CLUSTER).
+
+
 fdb_directory() ->
-    case get(?FDB_DIRECTORY) of
+    fdb_get(?FDB_DIRECTORY).
+
+
+fdb_get(Key) ->
+    case get(Key) of
         undefined ->
-            case application:get_env(fabric, ?FDB_DIRECTORY) of
+            case application:get_env(fabric, Key) of
                 undefined ->
                     erlang:error(fabric_application_not_started);
                 {ok, Dir} ->
-                    put(?FDB_DIRECTORY, Dir),
+                    put(Key, Dir),
                     Dir
             end;
         Dir ->

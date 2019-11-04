@@ -76,12 +76,16 @@ transactional(Fun) ->
 
 
 transactional(DbName, Options, Fun) when is_binary(DbName) ->
-    transactional(fun(Tx) ->
-        Fun(init_db(Tx, DbName, Options))
+    OpName = ctrace:fun_to_op(Fun),
+    with_span(OpName, #{'db.name' => DbName}, fun() ->
+        transactional(fun(Tx) ->
+            Fun(init_db(Tx, DbName, Options))
+        end)
     end).
 
 
 transactional(#{tx := undefined} = Db, Fun) ->
+    DbName = maps:get(name, Db, undefined),
     try
         Reopen = maps:get(reopen, Db, false),
         Db1 = maps:remove(reopen, Db),
@@ -89,18 +93,46 @@ transactional(#{tx := undefined} = Db, Fun) ->
             true -> undefined;
             false -> maps:get(layer_prefix, Db1)
         end,
-        do_transaction(fun(Tx) ->
-            case Reopen of
-                true -> Fun(reopen(Db1#{tx => Tx}));
-                false -> Fun(Db1#{tx => Tx})
-            end
-        end, LayerPrefix)
+        OpName = ctrace:fun_to_op(Fun),
+        with_span(OpName, #{'db.name' => DbName}, fun() ->
+            do_transaction(fun(Tx) ->
+                case Reopen of
+                    true -> Fun(reopen(Db1#{tx => Tx}));
+                    false -> Fun(Db1#{tx => Tx})
+                end
+            end, LayerPrefix)
+        end)
     catch throw:{?MODULE, reopen} ->
-        transactional(Db#{reopen => true}, Fun)
+        with_span('db.reopen', #{'db.name' => DbName}, fun() ->
+            transactional(Db#{reopen => true}, Fun)
+        end)
     end;
 
 transactional(#{tx := {erlfdb_transaction, _}} = Db, Fun) ->
-    Fun(Db).
+    OpName = ctrace:fun_to_op(Fun),
+    DbName = maps:get(name, Db, undefined),
+    with_span(OpName, #{'db.name' => DbName}, fun() ->
+        Fun(Db)
+    end).
+
+
+with_span(OpName, ExtraTags, Fun) ->
+    case ctrace:is_enabled() of
+        true ->
+            Tags = maps:merge(#{
+                'span.kind' => <<"client">>,
+                component => <<"couchdb.fabric">>,
+                'db.instance' => fabric2_server:fdb_cluster(),
+                'db.namespace' => fabric2_server:fdb_directory(),
+                'db.type' => <<"fdb">>
+            }, ExtraTags),
+            ctrace:with_span(OpName, fun() ->
+               ctrace:add_tags(Tags),
+               Fun()
+            end);
+        false ->
+            Fun()
+    end.
 
 
 do_transaction(Fun, LayerPrefix) when is_function(Fun, 1) ->
