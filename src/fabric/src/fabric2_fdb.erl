@@ -169,6 +169,17 @@ do_transaction(Fun, LayerPrefix) when is_function(Fun, 1) ->
     end.
 
 
+ctrace_id() ->
+    TraceId = hexify(ctrace:get_trace_id()),
+    SpanId = hexify(ctrace:get_span_id()),
+    <<TraceId/binary, ":", SpanId/binary, 0:8/integer>>.
+
+
+hexify(Value) ->
+    Bin = ?uint2bin(Value),
+    fabric2_util:to_hex(Bin).
+
+
 maybe_reuse_transaction(Db, UserFun) ->
     Tx = case get(?PDICT_PREV_TRANSACTION) of
         undefined ->

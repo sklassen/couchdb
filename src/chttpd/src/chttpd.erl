@@ -151,9 +151,21 @@ stop() ->
     catch mochiweb_http:stop(https),
     mochiweb_http:stop(?MODULE).
 
+
+ctrace_id() ->
+    TraceId = hexify(ctrace:get_trace_id()),
+    SpanId = hexify(ctrace:get_span_id()),
+    <<TraceId/binary, ":", SpanId/binary>>.
+
+hexify(Value) ->
+    Bin = binary:encode_unsigned(Value, little),
+    fabric2_util:to_hex(Bin).
+
+
 handle_request(MochiReq0) ->
     fabric2_fdb:clear_state(),
     ctrace:start_span('http.request'),
+    erlang:put(erlfdb_trace, ctrace_id()),
     erlang:put(?REWRITE_COUNT, 0),
     MochiReq = couch_httpd_vhost:dispatch_host(MochiReq0),
     handle_request_int(MochiReq).
