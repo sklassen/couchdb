@@ -359,17 +359,21 @@ get_pid(#{}) ->
 
 
 get_revs_limit(#{} = Db) ->
-    RevsLimitBin = fabric2_fdb:transactional(Db, fun(TxDb) ->
-        fabric2_fdb:get_config(TxDb, <<"revs_limit">>)
-    end),
-    ?bin2uint(RevsLimitBin).
+    fabric2_fdb:transactional(Db, fun(TxDb) ->
+        #{
+            revs_limit := RevsLimit
+        } = fabric2_fdb:ensure_current(TxDb),
+        RevsLimit
+    end).
 
 
 get_security(#{} = Db) ->
-    SecBin = fabric2_fdb:transactional(Db, fun(TxDb) ->
-        fabric2_fdb:get_config(TxDb, <<"security_doc">>)
-    end),
-    ?JSON_DECODE(SecBin).
+    fabric2_fdb:transactional(Db, fun(TxDb) ->
+        #{
+            security_doc := Security
+        } = fabric2_fdb:ensure_current(TxDb),
+        Security
+    end).
 
 
 get_update_seq(#{} = Db) ->

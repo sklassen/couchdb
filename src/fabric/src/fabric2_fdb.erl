@@ -26,6 +26,8 @@
     delete/1,
     exists/1,
 
+    ensure_current/1,
+
     get_dir/1,
 
     list_dbs/4,
