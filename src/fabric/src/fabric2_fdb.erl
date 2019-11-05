@@ -18,6 +18,8 @@
     transactional/3,
     transactional/2,
 
+    clear_state/0,
+
     create/2,
     open/2,
     reopen/1,
@@ -116,6 +118,10 @@ transactional(#{tx := {erlfdb_transaction, _}} = Db, Fun) ->
     end).
 
 
+clear_state() ->
+    erase(?PDICT_PREV_TRANSACTION).
+
+
 with_span(OpName, ExtraTags, Fun) ->
     case ctrace:is_enabled() of
         true ->
@@ -138,7 +144,7 @@ with_span(OpName, ExtraTags, Fun) ->
 do_transaction(Fun, LayerPrefix) when is_function(Fun, 1) ->
     Db = get_db_handle(),
     try
-        erlfdb:transactional(Db, fun(Tx) ->
+        maybe_reuse_transaction(Db, fun(Tx) ->
             case get(erlfdb_trace) of
                 Name when is_binary(Name) ->
                     erlfdb:set_option(Tx, transaction_logging_enable, Name);
@@ -158,6 +164,32 @@ do_transaction(Fun, LayerPrefix) when is_function(Fun, 1) ->
         end)
     after
         clear_transaction()
+    end.
+
+
+maybe_reuse_transaction(Db, UserFun) ->
+    Tx = case get(?PDICT_PREV_TRANSACTION) of
+        undefined ->
+            erlfdb:create_transaction(Db);
+        PrevTx ->
+            PrevTx
+    end,
+    try
+        Ret = UserFun(Tx),
+        case erlfdb:is_read_only(Tx) of
+            true ->
+                put(?PDICT_PREV_TRANSACTION, Tx);
+            false ->
+                erlfdb:wait(erlfdb:commit(Tx)),
+                erase(?PDICT_PREV_TRANSACTION)
+        end,
+        Ret
+    catch error:{erlfdb_error, Code} ->
+        couch_log:error("XKCD: ~p", [Code]),
+        erase(?PDICT_PREV_TRANSACTION),
+        put('$erlfdb_error', Code),
+        erlfdb:wait(erlfdb:on_error(Tx, Code)),
+        maybe_reuse_transaction(Db, UserFun)
     end.
 
 

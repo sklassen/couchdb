@@ -152,6 +152,7 @@ stop() ->
     mochiweb_http:stop(?MODULE).
 
 handle_request(MochiReq0) ->
+    fabric2_fdb:clear_state(),
     ctrace:start_span('http.request'),
     erlang:put(?REWRITE_COUNT, 0),
     MochiReq = couch_httpd_vhost:dispatch_host(MochiReq0),

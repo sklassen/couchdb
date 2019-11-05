@@ -64,6 +64,7 @@
 -define(PDICT_TX_ID_KEY, '$fabric_tx_id').
 -define(PDICT_TX_RES_KEY, '$fabric_tx_result').
 -define(PDICT_ON_COMMIT_FUN, '$fabric_on_commit_fun').
+-define(PDICT_PREV_TRANSACTION, '$fabric_prev_transaction').
 -define(COMMIT_UNKNOWN_RESULT, 1021).
 
 
