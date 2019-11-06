@@ -59,16 +59,18 @@ maybe_create_span(Props) ->
 
 create_span(Type, Props) ->
     %io:format(standard_error, "~p~n", [Props]),
+    OpName = binary_to_atom(Type, utf8),
+    Span = get_span(Props),
     {StartTime, EndTime} = get_time(Props),
-    {TraceId, SpanId} = get_trace_ids(Props),
     Tags = get_tags(Props),
 
-    fake_root(TraceId, SpanId),
-    passage_pd:start_span(binary_to_atom(Type, utf8), [
-        {time, StartTime},
-        {tags, Tags}
-    ]),
-    passage_pd:finish_span([{time, EndTime}]).
+    passage_pd:with_parent_span({child_of, Span}, fun() ->
+        passage_pd:start_span(OpName, [
+            {time, StartTime},
+            {tags, Tags}
+        ]),
+        passage_pd:finish_span([{time, EndTime}])
+    end).
 
 
 get_time(Props) ->
@@ -80,21 +82,17 @@ get_time(Props) ->
 
 
 float_to_time(Val) ->
-    Mega = trunc(Val / 1000000),
-    Secs = trunc(Val) rem 1000000,
-    Micro = trunc(Val * 1000000) rem 1000000,
+    BigVal = trunc(Val * 1000000),
+    Mega = BigVal div 1000000000000,
+    Secs = BigVal div 1000000 rem 1000000,
+    Micro = BigVal rem 1000000,
     {Mega, Secs, Micro}.
 
 
-get_trace_ids(Props) ->
+get_span(Props) ->
     {_, TxId} = lists:keyfind(<<"TransactionID">>, 1, Props),
-    [TraceIdBin, SpanIdBin] = binary:split(TxId, <<":">>),
-    TraceId = mochihex:to_bin(binary_to_list(TraceIdBin)),
-    SpanId = mochihex:to_bin(binary_to_list(SpanIdBin)),
-    {
-        binary:decode_unsigned(TraceId, little),
-        binary:decode_unsigned(SpanId, little)
-    }.
+    DeHexed = mochihex:to_bin(binary_to_list(TxId)),
+    ctrace:import_span(DeHexed).
 
 
 get_tags(Props) ->
@@ -127,29 +125,4 @@ start_tracer() ->
         {agent_port, 6831},
         {default_service_name, 'fdb-client'}
     ],
-    ok = jaeger_passage:start_tracer(main, Sampler, Options).
-
-
-fake_root(TraceId, SpanId) ->
-    Root = [{child_of, {
-        passage_span,
-        main,
-        foo,
-        {0, 0, 0},
-        undefined,
-        [],
-        #{},
-        [],
-        {
-            passage_span_context,
-            {
-                jaeger_passage_span_context,
-                TraceId,
-                SpanId,
-                true,
-                undefined
-            },
-            #{}
-        }
-    }}],
-    put(?ANCESTORS_KEY, Root).
+    ok = jaeger_passage:start_tracer(jaeger_passage_reporter, Sampler, Options).

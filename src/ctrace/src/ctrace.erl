@@ -37,14 +37,17 @@
     get_trace_id/0,
     get_span_id/0,
     get_tracer/0,
-    get_context/0
+    get_context/0,
+
+    export_span/0,
+    import_span/1
 ]).
 
 
 -include_lib("passage/include/opentracing.hrl").
 
 -define(ENABLED_KEY, '$ctrace_enabled$').
-
+-define(ANCESTORS_KEY, passage_span_ancestors).
 
 -type tags() :: #{atom() => term()}.
 -type log_fields() :: #{atom() => term()}.
@@ -253,3 +256,28 @@ get_context() ->
         false ->
             undefined
     end.
+
+
+-spec export_span() -> binary().
+
+export_span() ->
+    % TODO: Support non-Erlang specific formats
+    Span = passage_pd:current_span(),
+    InjectFun = fun(<<"binary">>, Value, Acc) -> [Value | Acc] end,
+    InitCarrier = [],
+    Carrier = passage:inject_span(Span, binary, InjectFun, InitCarrier),
+    fabric2_util:to_hex(iolist_to_binary(Carrier)).
+
+
+-spec import_span(binary()) -> passage:span().
+
+import_span(Binary) ->
+    IterFun = fun(Carrier) ->
+        case Carrier of
+            [] ->
+                error;
+            [Bin | Rest] ->
+                {ok, <<"binary">>, Bin, Rest}
+        end
+    end,
+    passage:extract_span(jaeger_passage_reporter, binary, IterFun, [Binary]).
