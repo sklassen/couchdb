@@ -8,6 +8,7 @@
 -define(ANCESTORS_KEY, passage_span_ancestors).
 -define(SPAN_TYPES, [
     <<"TransactionTrace_Commit">>,
+    <<"TransactionTrace_CommitError">>,
     <<"TransactionTrace_Get">>,
     <<"TransactionTrace_GetRange">>,
     <<"TransactionTrace_GetVersion">>
@@ -19,7 +20,8 @@
     {<<"ValueSizeBytes">>, 'value-size-bytes'},
     {<<"RangeSizeBytes">>, 'range-size-bytes'},
     {<<"NumMutations">>, 'num-mutations'},
-    {<<"CommitSizeBytes">>, 'commit-size-bytes'}
+    {<<"CommitSizeBytes">>, 'commit-size-bytes'},
+    {<<"ErrCode">>, 'error-code'}
 ]).
 
 
@@ -75,7 +77,10 @@ create_span(Type, Props) ->
 
 get_time(Props) ->
     {_, EndTimeBin} = lists:keyfind(<<"Time">>, 1, Props),
-    {_, LatencyBin} = lists:keyfind(<<"Latency">>, 1, Props),
+    LatencyBin = case lists:keyfind(<<"Latency">>, 1, Props) of
+        {_, LB} -> LB;
+        false -> <<"0.0">>
+    end,
     EndTimeFloat = binary_to_float(EndTimeBin),
     Latency = binary_to_float(LatencyBin),
     {float_to_time(EndTimeFloat - Latency), float_to_time(EndTimeFloat)}.
@@ -99,7 +104,15 @@ get_tags(Props) ->
     lists:foldl(fun({BinKey, AtomKey}, Tags) ->
         case lists:keyfind(BinKey, 1, Props) of
             {_, Value} ->
-                Tags#{AtomKey => Value};
+                Tags1 = Tags#{AtomKey => Value},
+                if BinKey /= <<"ErrCode">> -> Tags1; true ->
+                    IntCode = binary_to_integer(Value),
+                    Reason = erlfdb_nif:get_error(IntCode),
+                    Tags1#{
+                        error => true,
+                        reason => Reason
+                    }
+                end;
             false ->
                 Tags
         end
