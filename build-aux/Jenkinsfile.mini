@@ -139,26 +139,40 @@ pipeline {
                 sh 'make test-cluster-without-quorum'
                 sh 'make python-black'
 
-                //sh 'make eunit'
-                final skip_dirs = [
-                    'bcrypt',
-                    'docs',
-                    'fauxton',
-                    'folsom',
-                    'hyper',
-                    'meck',
-                    'mochiweb',
-                    'proper',
-                    'snappy',
-                    'triq'
-                ]
-                final test_dirs = findFiles(glob: "src/*")
-                test_dirs.sort()
-                for (int i = 0; i < test_dirs.size() ; i++) {
-                    if(!skip_dirs.contains(test_dirs[i])) {
-                        sh 'make eunit apps=${test_dirs[i]}'
-                    }
-                }
+
+                sh 'make eunit apps=b64url'
+                sh 'make eunit apps=bear'
+                sh 'make eunit apps=chttpd'
+                sh 'make eunit apps=config'
+                sh 'make eunit apps=couch'
+                sh 'make eunit apps=couch_epi'
+                sh 'make eunit apps=couch_event'
+                sh 'make eunit apps=couch_index'
+                sh 'make eunit apps=couch_log'
+                sh 'make eunit apps=couch_mrview'
+                sh 'make eunit apps=couch_peruser'
+                sh 'make eunit apps=couch_plugins'
+                sh 'make eunit apps=couch_pse_tests'
+                sh 'make eunit apps=couch_replicator'
+                sh 'make eunit apps=couch_stats'
+                sh 'make eunit apps=couch_tests'
+                sh 'make eunit apps=ddoc_cache'
+                sh 'make eunit apps=dreyfus'
+                sh 'make eunit apps=ets_lru'
+                sh 'make eunit apps=fabric'
+                sh 'make eunit apps=global_changes'
+                sh 'make eunit apps=hqueue'
+                sh 'make eunit apps=ioq'
+                sh 'make eunit apps=jiffy'
+                sh 'make eunit apps=ken'
+                sh 'make eunit apps=khash'
+                sh 'make eunit apps=mango'
+                sh 'make eunit apps=meck'
+                sh 'make eunit apps=mem3'
+                sh 'make eunit apps=rexi'
+                sh 'make eunit apps=setup'
+                sh 'make eunit apps=smoosh'
+
 
                 sh 'make javascript'
                 sh 'make mango-test'
