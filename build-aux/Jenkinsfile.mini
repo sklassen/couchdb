@@ -89,7 +89,7 @@ pipeline {
         '''
         sh './configure --with-curl'
         sh 'make couch'
-        // sh 'make fauxton'
+        sh 'make fauxton'
         sh 'make docs'
         sh 'make dist'
         sh 'chmod -R a+w * .'
