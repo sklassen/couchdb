@@ -409,7 +409,7 @@ introspect:
 
 .PHONY: dist
 # target: dist - Make release tarball
-dist: all
+dist:
 	@./build-aux/couchdb-build-release.sh $(COUCHDB_VERSION)
 
 	@cp -r share/www apache-couchdb-$(COUCHDB_VERSION)/share/
