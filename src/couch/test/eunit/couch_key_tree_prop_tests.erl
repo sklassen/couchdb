@@ -12,12 +12,42 @@
 
 -module(couch_key_tree_prop_tests).
 
+-export([
+    key_tree_test_/0
+]).
+
 -include_lib("triq/include/triq.hrl").
--triq(eunit).
+
+
+-ifdef(PR_BUILD).
+-define(NUM_TESTS, 1).
+-else.
+-define(NUM_TESTS, 100).
+-endif.
 
 -define(SIZE_REDUCTION, 3).  % How much to reduce size with tree depth.
 -define(MAX_BRANCHES, 4).  % Maximum number of branches.
 -define(RAND_SIZE, 1 bsl 64).
+
+
+key_tree_test_() ->
+    Tests = [
+        prop_revtree_merge_with_subset_of_own_nodes,
+        prop_revtree_merge_random_nodes,
+        prop_revtree_merge_some_existing_some_new,
+        prop_no_change_stemming_deeper_than_current_depth,
+        prop_stemming_results_in_same_or_less_total_revs,
+        prop_stem_path_expect_size_to_get_smaller,
+        prop_after_stemming_all_leaves_are_present,
+        prop_after_stemming_paths_are_shorter,
+        prop_leaf_count,
+        prop_get_leafs
+    ],
+    lists:map(fun(Test) ->
+        {timeout, 3600, {atom_to_list(Test), fun() ->
+            true == triq:check(?MODULE:Test(), ?NUM_TESTS)
+        end}}
+    end, Tests).
 
 
 %

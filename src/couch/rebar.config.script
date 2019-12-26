@@ -199,6 +199,12 @@ end,
 PlatformDefines = [
    {platform_define, "win32", 'WINDOWS'}
 ],
+EunitOpts = case os:getenv("PR_BUILD", "false") of
+    "true" ->
+        [{d, 'PR_BUILD'}];
+    _ ->
+        []
+end,
 AddConfig = [
     {port_specs, PortSpecs},
     {erl_opts, PlatformDefines ++ [
@@ -206,7 +212,7 @@ AddConfig = [
         {d, 'COUCHDB_GIT_SHA', GitSha},
         {i, "../"}
     ] ++ MD5Config},
-    {eunit_compile_opts, PlatformDefines}
+    {eunit_compile_opts, EunitOpts ++ PlatformDefines}
 ].
 
 lists:foldl(fun({K, V}, CfgAcc) ->

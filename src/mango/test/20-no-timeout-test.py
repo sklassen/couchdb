@@ -12,14 +12,20 @@
 
 import mango
 import copy
+import os
 import unittest
+
+
+NUM_DOCS = 100000
+if os.getenv("PR_BUILD", "false").lower() == "true":
+    NUM_DOCS = 100
 
 
 class LongRunningMangoTest(mango.DbPerClass):
     def setUp(self):
         self.db.recreate()
         docs = []
-        for i in range(100000):
+        for i in range(NUM_DOCS):
             docs.append({"_id": str(i), "another": "field"})
             if i % 20000 == 0:
                 self.db.save_docs(docs)
