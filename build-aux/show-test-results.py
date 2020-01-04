@@ -26,10 +26,7 @@ def _attrs(elem):
 def _text(elem):
     rc = []
     for node in elem.childNodes:
-        if node.nodeType == node.TEXT_NODE:
-            rc.append(node.data)
-        else:
-            rc.append(self._text(node))
+        rc.append(node.wholeText)
     return ''.join(rc)
 
 
