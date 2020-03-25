@@ -61,10 +61,8 @@ db_updated(DbName) when is_binary(DbName) ->
 cleanup(Db) ->
     try
         fabric2_fdb:transactional(Db, fun(TxDb) ->
-            DDocs = fabric2_db:get_design_docs(TxDb),
-            lists:foreach(fun(Mod) ->
-                Mod:cleanup_indices(TxDb, DDocs)
-            end, registrations())
+            DDocs = fabric2_db:get_design_docs(Db),
+            cleanup_indices(TxDb, DDocs)
         end)
     catch
         error:database_does_not_exist ->
@@ -183,7 +181,11 @@ process_db(DbName) when is_binary(DbName) ->
         DDocs1 = fabric2_db:get_design_docs(TxDb),
         DDocs2 = lists:filter(fun should_update/1, DDocs1),
         DDocs3 = shuffle(DDocs2),
-        build_indices(TxDb, DDocs3)
+        build_indices(TxDb, DDocs3),
+        case auto_cleanup() of
+            true -> cleanup_indices(TxDb, DDocs1);
+            false -> ok
+        end
     end).
 
 
@@ -193,6 +195,12 @@ build_indices(_TxDb, []) ->
 build_indices(TxDb, DDocs) ->
     lists:flatmap(fun(Mod) ->
         Mod:build_indices(TxDb, DDocs)
+    end, registrations()).
+
+
+cleanup_indices(TxDb, DDocs) ->
+    lists:foreach(fun(Mod) ->
+        Mod:cleanup_indices(TxDb, DDocs)
     end, registrations()).
 
 
@@ -226,3 +234,7 @@ delay_msec() ->
 resolution_msec() ->
     config:get_integer("fabric", "index_updater_resolution_msec",
         ?DEFAULT_RESOLUTION_MSEC).
+
+
+auto_cleanup() ->
+    config:get_boolean("fabric", "index_updater_remove_old_indices", false).
